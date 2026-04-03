@@ -46,7 +46,7 @@
     <div class="flex flex-col sm:flex-row gap-3 mb-6">
       <input id="search" type="text" placeholder="Search order, customer, email…"
         class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
-      <div class="flex gap-1 p-1 bg-gray-100 rounded-lg" id="filter-tabs">
+      <div class="flex gap-1 p-1 bg-gray-100 rounded-lg">
         <button onclick="setFilter('all')"      class="filter-btn px-3 py-1.5 rounded-md text-sm font-medium transition-colors" data-f="all">All</button>
         <button onclick="setFilter('pending')"  class="filter-btn px-3 py-1.5 rounded-md text-sm font-medium transition-colors" data-f="pending">Pending</button>
         <button onclick="setFilter('recorded')" class="filter-btn px-3 py-1.5 rounded-md text-sm font-medium transition-colors" data-f="recorded">Recorded</button>
@@ -58,7 +58,7 @@
     <div id="toast" class="hidden mb-4 px-4 py-3 rounded-lg text-sm font-medium"></div>
 
     <!-- Table -->
-    <div id="table-wrap" class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead class="bg-gray-50 border-b border-gray-200">
@@ -84,6 +84,65 @@
     </div>
   </div>
 
+  <!-- ── Send Proof Modal ──────────────────────────────────────────────────── -->
+  <div id="send-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" onclick="closeSendModal()"></div>
+    <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+      <h2 class="text-lg font-semibold text-gray-900 mb-1">Send Delivery Proof</h2>
+      <p class="text-sm text-gray-500 mb-5">Review or correct the customer's email before sending.</p>
+
+      <div class="bg-gray-50 rounded-xl p-4 mb-5 text-sm space-y-2">
+        <div class="flex justify-between"><span class="text-gray-500">Order</span><span class="font-medium" id="modal-order-num">—</span></div>
+        <div class="flex justify-between"><span class="text-gray-500">Customer</span><span class="font-medium" id="modal-customer">—</span></div>
+        <div class="flex justify-between"><span class="text-gray-500">Media</span><span class="font-medium" id="modal-media-count">—</span></div>
+      </div>
+
+      <label class="block text-sm font-medium text-gray-700 mb-1">
+        Send to email
+        <span class="ml-1 text-xs text-gray-400 font-normal">(edit if incorrect)</span>
+      </label>
+      <input id="modal-email" type="email" placeholder="customer@example.com"
+        class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-1 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+      <p id="modal-email-err" class="text-xs text-red-500 mb-4 hidden">Please enter a valid email address.</p>
+
+      <div id="modal-error" class="hidden mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700"></div>
+
+      <div class="flex gap-3 justify-end">
+        <button onclick="closeSendModal()"
+          class="px-4 py-2 border border-gray-300 bg-white text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50">
+          Cancel
+        </button>
+        <button id="modal-send-btn" onclick="confirmSend()"
+          class="inline-flex items-center gap-2 px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-700 disabled:opacity-50">
+          📧 Send Proof
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Edit Email Modal ──────────────────────────────────────────────────── -->
+  <div id="edit-email-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" onclick="closeEditEmailModal()"></div>
+    <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+      <h2 class="text-lg font-semibold text-gray-900 mb-1">Edit Customer Email</h2>
+      <p class="text-sm text-gray-500 mb-5" id="edit-email-subtitle">—</p>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Email address</label>
+      <input id="edit-email-input" type="email" placeholder="customer@example.com"
+        class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+      <div id="edit-email-err" class="hidden mb-3 text-sm text-red-600"></div>
+      <div class="flex gap-3 justify-end">
+        <button onclick="closeEditEmailModal()"
+          class="px-4 py-2 border border-gray-300 bg-white text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50">
+          Cancel
+        </button>
+        <button onclick="saveEmail()"
+          class="px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-700">
+          Save
+        </button>
+      </div>
+    </div>
+  </div>
+
   <script>
     const statusClasses = {
       pending:  'bg-yellow-100 text-yellow-700',
@@ -91,17 +150,21 @@
       sent:     'bg-green-100 text-green-700',
     };
 
-    let allOrders = [];
+    let allOrders    = [];
     let activeFilter = new URLSearchParams(location.search).get('filter') || 'all';
+    let pendingSend  = null;  // { id, email } for modal
+    let pendingEdit  = null;  // { id } for edit-email modal
 
+    // ── Toast ──────────────────────────────────────────────────────────────────
     function showToast(msg, ok = true) {
       const t = document.getElementById('toast');
       t.className = `mb-4 px-4 py-3 rounded-lg text-sm font-medium ${ok ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`;
       t.textContent = msg;
       t.classList.remove('hidden');
-      setTimeout(() => t.classList.add('hidden'), 4000);
+      setTimeout(() => t.classList.add('hidden'), 5000);
     }
 
+    // ── Filter ─────────────────────────────────────────────────────────────────
     function setFilter(f) {
       activeFilter = f;
       document.querySelectorAll('.filter-btn').forEach(b => {
@@ -111,6 +174,7 @@
       render();
     }
 
+    // ── Render table ───────────────────────────────────────────────────────────
     function render() {
       const q = document.getElementById('search').value.toLowerCase();
       const rows = allOrders.filter(o => {
@@ -129,13 +193,28 @@
         return;
       }
       document.getElementById('empty').classList.add('hidden');
-      document.getElementById('tbody').innerHTML = rows.map(o => `
-        <tr class="hover:bg-gray-50 transition-colors" id="row-${o.id}">
+
+      document.getElementById('tbody').innerHTML = rows.map(o => {
+        const emailDisplay = o.customerEmail
+          ? `<span class="text-gray-700">${o.customerEmail}</span>`
+          : `<span class="text-red-400 italic">No email</span>`;
+
+        return `
+        <tr class="hover:bg-gray-50 transition-colors">
           <td class="px-4 py-3 font-mono text-xs font-medium text-gray-900">${o.orderNumber || o.id.slice(0,8)}</td>
           <td class="px-4 py-3 font-medium text-gray-900">${o.customerName || '—'}</td>
-          <td class="px-4 py-3 text-gray-500">
-            <div>${o.customerEmail || '—'}</div>
-            ${o.customerPhone ? `<div class="text-xs text-gray-400">${o.customerPhone}</div>` : ''}
+          <td class="px-4 py-3">
+            <div class="flex items-center gap-1.5">
+              ${emailDisplay}
+              <button onclick="openEditEmail('${o.id}')" title="Edit email"
+                class="text-gray-300 hover:text-brand-500 transition-colors flex-shrink-0">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+                </svg>
+              </button>
+            </div>
+            ${o.customerPhone ? `<div class="text-xs text-gray-400 mt-0.5">${o.customerPhone}</div>` : ''}
           </td>
           <td class="px-4 py-3 text-gray-600 max-w-xs truncate" title="${o.lineItems||''}">${o.lineItems || '—'}</td>
           <td class="px-4 py-3 text-gray-700">${o.total || '—'}</td>
@@ -145,10 +224,18 @@
           </td>
           <td class="px-4 py-3">
             <div class="flex items-center gap-2">
-              <a href="record.html?id=${o.id}" class="px-2 py-1 border border-gray-300 bg-white text-gray-700 rounded-lg text-xs font-medium hover:bg-gray-50">🎬 Record</a>
+              <a href="record.html?id=${o.id}"
+                class="px-2 py-1 border border-gray-300 bg-white text-gray-700 rounded-lg text-xs font-medium hover:bg-gray-50">
+                🎬 Record
+              </a>
               ${o.status === 'recorded'
-                ? `<button onclick="sendProof('${o.id}','${o.customerEmail}')" class="px-2 py-1 bg-brand-600 text-white rounded-lg text-xs font-medium hover:bg-brand-700 send-btn-${o.id}">📧 Send</button>`
-                : o.status === 'sent' ? `<span class="text-xs text-green-600 font-medium">✓ Sent</span>` : ''}
+                ? `<button onclick="openSendModal('${o.id}')"
+                    class="px-2 py-1 bg-brand-600 text-white rounded-lg text-xs font-medium hover:bg-brand-700">
+                    📧 Send
+                   </button>`
+                : o.status === 'sent'
+                  ? `<span class="text-xs text-green-600 font-medium">✓ Sent</span>`
+                  : ''}
               <button onclick="deleteOrder('${o.id}')" class="p-1 text-gray-400 hover:text-red-500 transition-colors">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -157,34 +244,125 @@
               </button>
             </div>
           </td>
-        </tr>`).join('');
+        </tr>`;
+      }).join('');
     }
 
-    async function sendProof(id, email) {
-      if (!confirm(`Send proof to ${email}?`)) return;
-      const btn = document.querySelector(`.send-btn-${id}`);
-      if (btn) { btn.disabled = true; btn.textContent = '…'; }
+    // ── Send Proof Modal ───────────────────────────────────────────────────────
+    function openSendModal(id) {
+      const o = allOrders.find(x => x.id === id);
+      if (!o) return;
+      pendingSend = { id };
+      document.getElementById('modal-order-num').textContent   = o.orderNumber || id.slice(0,8);
+      document.getElementById('modal-customer').textContent    = o.customerName || '—';
+      document.getElementById('modal-media-count').textContent = `${o.mediaCount || 0} file(s)`;
+      document.getElementById('modal-email').value             = o.customerEmail || '';
+      document.getElementById('modal-email-err').classList.add('hidden');
+      document.getElementById('modal-error').classList.add('hidden');
+      document.getElementById('modal-send-btn').disabled       = false;
+      document.getElementById('modal-send-btn').textContent    = '📧 Send Proof';
+      document.getElementById('send-modal').classList.remove('hidden');
+      setTimeout(() => document.getElementById('modal-email').focus(), 50);
+    }
+
+    function closeSendModal() {
+      document.getElementById('send-modal').classList.add('hidden');
+      pendingSend = null;
+    }
+
+    async function confirmSend() {
+      if (!pendingSend) return;
+      const email = document.getElementById('modal-email').value.trim();
+      const emailErr = document.getElementById('modal-email-err');
+      const modalErr = document.getElementById('modal-error');
+
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        emailErr.classList.remove('hidden');
+        return;
+      }
+      emailErr.classList.add('hidden');
+      modalErr.classList.add('hidden');
+
+      const btn = document.getElementById('modal-send-btn');
+      btn.disabled = true; btn.textContent = 'Sending…';
+
       try {
         const res  = await fetch('/api/send-proof', {
-          method: 'POST',
+          method:  'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ orderId: id }),
+          body:    JSON.stringify({ orderId: pendingSend.id, overrideEmail: email }),
         });
         const data = await res.json();
         if (data.success) {
-          allOrders = allOrders.map(o => o.id === id ? { ...o, status: 'sent' } : o);
+          allOrders = allOrders.map(o =>
+            o.id === pendingSend.id ? { ...o, status: 'sent', customerEmail: email } : o
+          );
+          closeSendModal();
           render();
-          showToast(`✓ Proof sent to ${email}`);
+          showToast(`✓ Proof sent to ${data.sentTo}`);
         } else {
-          showToast(data.error || 'Send failed', false);
-          if (btn) { btn.disabled = false; btn.textContent = '📧 Send'; }
+          modalErr.textContent = data.error || 'Send failed. Check SMTP settings.';
+          modalErr.classList.remove('hidden');
+          btn.disabled = false; btn.textContent = '📧 Send Proof';
         }
       } catch (e) {
-        showToast('Network error', false);
-        if (btn) { btn.disabled = false; btn.textContent = '📧 Send'; }
+        modalErr.textContent = 'Network error – could not reach the server.';
+        modalErr.classList.remove('hidden');
+        btn.disabled = false; btn.textContent = '📧 Send Proof';
       }
     }
 
+    // ── Edit Email Modal ───────────────────────────────────────────────────────
+    function openEditEmail(id) {
+      const o = allOrders.find(x => x.id === id);
+      if (!o) return;
+      pendingEdit = { id };
+      document.getElementById('edit-email-subtitle').textContent =
+        `Order ${o.orderNumber || id.slice(0,8)} — ${o.customerName || ''}`;
+      document.getElementById('edit-email-input').value = o.customerEmail || '';
+      document.getElementById('edit-email-err').classList.add('hidden');
+      document.getElementById('edit-email-modal').classList.remove('hidden');
+      setTimeout(() => document.getElementById('edit-email-input').focus(), 50);
+    }
+
+    function closeEditEmailModal() {
+      document.getElementById('edit-email-modal').classList.add('hidden');
+      pendingEdit = null;
+    }
+
+    async function saveEmail() {
+      if (!pendingEdit) return;
+      const email  = document.getElementById('edit-email-input').value.trim();
+      const errEl  = document.getElementById('edit-email-err');
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        errEl.textContent = 'Please enter a valid email address.';
+        errEl.classList.remove('hidden');
+        return;
+      }
+      errEl.classList.add('hidden');
+      try {
+        const res  = await fetch(`/api/orders/${pendingEdit.id}`, {
+          method:  'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ customerEmail: email }),
+        });
+        const data = await res.json();
+        if (data.order) {
+          allOrders = allOrders.map(o => o.id === pendingEdit.id ? { ...o, customerEmail: email } : o);
+          closeEditEmailModal();
+          render();
+          showToast('Email updated');
+        } else {
+          errEl.textContent = data.error || 'Save failed';
+          errEl.classList.remove('hidden');
+        }
+      } catch (e) {
+        errEl.textContent = 'Network error';
+        errEl.classList.remove('hidden');
+      }
+    }
+
+    // ── Delete ─────────────────────────────────────────────────────────────────
     async function deleteOrder(id) {
       if (!confirm('Delete this order?')) return;
       await fetch(`/api/orders/${id}`, { method: 'DELETE' });
@@ -192,7 +370,16 @@
       render();
     }
 
-    // Init
+    // ── Keyboard shortcut (Enter in modal) ─────────────────────────────────────
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') { closeSendModal(); closeEditEmailModal(); }
+      if (e.key === 'Enter') {
+        if (!document.getElementById('send-modal').classList.contains('hidden'))      confirmSend();
+        if (!document.getElementById('edit-email-modal').classList.contains('hidden')) saveEmail();
+      }
+    });
+
+    // ── Init ───────────────────────────────────────────────────────────────────
     setFilter(activeFilter);
     document.getElementById('search').addEventListener('input', render);
 

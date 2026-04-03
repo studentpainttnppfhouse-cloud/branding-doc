@@ -149,6 +149,42 @@
     </div>
   </div>
 
+  <!-- ── Send Proof Modal ──────────────────────────────────────────────────── -->
+  <div id="send-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" onclick="closeSendModal()"></div>
+    <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+      <h2 class="text-lg font-semibold text-gray-900 mb-1">Send Delivery Proof</h2>
+      <p class="text-sm text-gray-500 mb-5">Review or correct the customer's email before sending.</p>
+
+      <div class="bg-gray-50 rounded-xl p-4 mb-5 text-sm space-y-2">
+        <div class="flex justify-between"><span class="text-gray-500">Order</span><span class="font-medium" id="modal-order-num">—</span></div>
+        <div class="flex justify-between"><span class="text-gray-500">Customer</span><span class="font-medium" id="modal-customer">—</span></div>
+        <div class="flex justify-between"><span class="text-gray-500">Media</span><span class="font-medium" id="modal-media-count">—</span></div>
+      </div>
+
+      <label class="block text-sm font-medium text-gray-700 mb-1">
+        Send to email
+        <span class="ml-1 text-xs text-gray-400 font-normal">(edit if incorrect)</span>
+      </label>
+      <input id="modal-email" type="email" placeholder="customer@example.com"
+        class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-1 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+      <p id="modal-email-err" class="text-xs text-red-500 mb-4 hidden">Please enter a valid email address.</p>
+
+      <div id="modal-error" class="hidden mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700"></div>
+
+      <div class="flex gap-3 justify-end">
+        <button onclick="closeSendModal()"
+          class="px-4 py-2 border border-gray-300 bg-white text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50">
+          Cancel
+        </button>
+        <button id="modal-send-btn" onclick="confirmSend()"
+          class="inline-flex items-center gap-2 px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-700 disabled:opacity-50">
+          📧 Send Proof
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Loading / error states -->
   <div id="loading" class="flex items-center justify-center min-h-64 text-gray-400">Loading order…</div>
   <div id="not-found" class="hidden flex items-center justify-center min-h-64 flex-col gap-4">
@@ -220,7 +256,8 @@
     function updateSendBtn() {
       const btn = document.getElementById('send-btn');
       btn.style.display = mediaList.length ? '' : 'none';
-      btn.textContent   = `📧 Send Proof to ${order.customerEmail}`;
+      const emailLabel  = order.customerEmail || 'Customer';
+      btn.textContent   = `📧 Send Proof to ${emailLabel}`;
     }
 
     // ── Mode ──────────────────────────────────────────────────────────────────
@@ -387,30 +424,67 @@
       list.innerHTML = items.join('') + `<li id="no-media" style="${mediaList.length ? 'display:none' : ''}" class="text-sm text-gray-400">No media yet. Record a video or take a photo.</li>`;
     }
 
-    // ── Send proof ────────────────────────────────────────────────────────────
-    async function sendProof() {
-      if (!confirm(`Send proof to ${order.customerEmail}?`)) return;
-      const btn = document.getElementById('send-btn');
+    // ── Send proof – open modal ───────────────────────────────────────────────
+    function sendProof() {
+      document.getElementById('modal-order-num').textContent   = order.orderNumber || orderId.slice(0,8);
+      document.getElementById('modal-customer').textContent    = order.customerName || '—';
+      document.getElementById('modal-media-count').textContent = `${mediaList.length} file(s)`;
+      document.getElementById('modal-email').value             = order.customerEmail || '';
+      document.getElementById('modal-email-err').classList.add('hidden');
+      document.getElementById('modal-error').classList.add('hidden');
+      document.getElementById('modal-send-btn').disabled       = false;
+      document.getElementById('modal-send-btn').textContent    = '📧 Send Proof';
+      document.getElementById('send-modal').classList.remove('hidden');
+      setTimeout(() => document.getElementById('modal-email').focus(), 50);
+    }
+
+    function closeSendModal() {
+      document.getElementById('send-modal').classList.add('hidden');
+    }
+
+    async function confirmSend() {
+      const email    = document.getElementById('modal-email').value.trim();
+      const emailErr = document.getElementById('modal-email-err');
+      const modalErr = document.getElementById('modal-error');
+
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        emailErr.classList.remove('hidden');
+        return;
+      }
+      emailErr.classList.add('hidden');
+      modalErr.classList.add('hidden');
+
+      const btn = document.getElementById('modal-send-btn');
       btn.disabled = true; btn.textContent = 'Sending…';
+
       try {
         const res  = await fetch('/api/send-proof', {
-          method: 'POST',
+          method:  'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ orderId }),
+          body:    JSON.stringify({ orderId, overrideEmail: email }),
         });
         const data = await res.json();
         if (data.success) {
-          alert(`✓ Proof sent to ${order.customerEmail}!`);
-          location.href = 'orders.html';
+          // Update local order email if it changed
+          order.customerEmail = email;
+          closeSendModal();
+          location.href = `orders.html`;
         } else {
-          alert(data.error || 'Send failed');
-          btn.disabled = false; btn.textContent = `📧 Send Proof to ${order.customerEmail}`;
+          modalErr.textContent = data.error || 'Send failed. Check SMTP settings on the server.';
+          modalErr.classList.remove('hidden');
+          btn.disabled = false; btn.textContent = '📧 Send Proof';
         }
       } catch (e) {
-        alert('Network error');
-        btn.disabled = false; btn.textContent = `📧 Send Proof to ${order.customerEmail}`;
+        modalErr.textContent = 'Network error – could not reach the server.';
+        modalErr.classList.remove('hidden');
+        btn.disabled = false; btn.textContent = '📧 Send Proof';
       }
     }
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') closeSendModal();
+      if (e.key === 'Enter' && !document.getElementById('send-modal').classList.contains('hidden')) confirmSend();
+    });
   </script>
 </body>
 </html>

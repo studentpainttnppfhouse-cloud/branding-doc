@@ -159,22 +159,28 @@ app.get('/api/media/:filename', (req, res) => {
 // ── Send proof email ──────────────────────────────────────────────────────────
 app.post('/api/send-proof', async (req, res) => {
   try {
-    const { orderId } = req.body
+    const { orderId, overrideEmail } = req.body
     if (!orderId) return res.status(400).json({ error: 'orderId required' })
 
-    const order = getOrderById(orderId)
-    if (!order)                              return res.status(404).json({ error: 'Order not found' })
-    if (!order.customerEmail)                return res.status(400).json({ error: 'Order has no customer email' })
+    let order = getOrderById(orderId)
+    if (!order) return res.status(404).json({ error: 'Order not found' })
+
+    // Save updated email if the user corrected it in the UI
+    const sendTo = (overrideEmail || '').trim() || order.customerEmail
+    if (!sendTo) return res.status(400).json({ error: 'No customer email address. Please enter one before sending.' })
     if (!order.media || !order.media.length) return res.status(400).json({ error: 'No media recorded yet' })
 
+    if (overrideEmail && overrideEmail.trim() !== order.customerEmail) {
+      order = upsertOrder({ ...order, customerEmail: overrideEmail.trim(), updatedAt: new Date().toISOString() })
+    }
+
     const result = await sendProofEmail({
-      order,
+      order: { ...order, customerEmail: sendTo },
       mediaList: order.media,
-      baseUrl: process.env.BASE_URL || `http://localhost:${PORT}`,
     })
 
     updateOrderStatus(orderId, 'sent')
-    res.json({ success: true, messageId: result.messageId, sentTo: order.customerEmail })
+    res.json({ success: true, messageId: result.messageId, sentTo: sendTo })
   } catch (err) {
     console.error('Send proof error:', err)
     res.status(500).json({ error: err.message })
