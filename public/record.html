@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DeliveryProof – Recording Studio</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: { colors: { brand: { 50:'#f0f9ff',100:'#e0f2fe',500:'#0ea5e9',600:'#0284c7',700:'#0369a1' } } } }
+    }
+  </script>
+  <style>
+    #live-video { background:#000; }
+    .media-thumb { max-height: 60px; object-fit: cover; border-radius: 4px; }
+    @keyframes pulse-ring { 0%,100%{opacity:1} 50%{opacity:.3} }
+    .rec-dot { animation: pulse-ring 1s ease-in-out infinite; }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-900 antialiased">
+
+  <!-- Nav -->
+  <nav class="bg-white border-b border-gray-200 px-6 py-3 flex items-center gap-6 sticky top-0 z-50 shadow-sm">
+    <a href="index.html" class="flex items-center gap-2 font-bold text-brand-700 text-lg">
+      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M15 10l4.553-2.069A1 1 0 0121 8.867V17a1 1 0 01-1.447.894L15 15M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/>
+      </svg>
+      DeliveryProof
+    </a>
+    <a href="index.html"  class="text-sm text-gray-500 hover:text-brand-600">Dashboard</a>
+    <a href="orders.html" class="text-sm text-gray-500 hover:text-brand-600">Orders</a>
+    <a href="import.html" class="text-sm text-gray-500 hover:text-brand-600">Import</a>
+  </nav>
+
+  <div class="max-w-6xl mx-auto px-6 py-8" id="main" style="display:none">
+    <!-- Header -->
+    <div class="flex items-start justify-between mb-6 flex-wrap gap-3">
+      <div class="flex items-center gap-3">
+        <a href="orders.html" class="text-gray-400 hover:text-gray-600">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+          </svg>
+        </a>
+        <div>
+          <h1 class="text-2xl font-bold text-gray-900">Recording Studio</h1>
+          <p class="text-gray-500 text-sm mt-0.5" id="order-subtitle">Loading…</p>
+        </div>
+      </div>
+      <button id="send-btn" onclick="sendProof()" style="display:none"
+        class="inline-flex items-center gap-2 px-4 py-2 bg-brand-600 text-white rounded-lg font-medium hover:bg-brand-700 transition-colors disabled:opacity-50">
+        📧 Send Proof to Customer
+      </button>
+    </div>
+
+    <div class="grid lg:grid-cols-3 gap-6">
+      <!-- Camera panel -->
+      <div class="lg:col-span-2 space-y-4">
+
+        <!-- Mode selector -->
+        <div class="flex gap-1 p-1 bg-gray-100 rounded-lg w-fit">
+          <button onclick="setMode('camera')" id="mode-camera" class="mode-btn px-4 py-1.5 rounded-md text-sm font-medium transition-colors">📷 Camera</button>
+          <button onclick="setMode('screen')" id="mode-screen" class="mode-btn px-4 py-1.5 rounded-md text-sm font-medium transition-colors">🖥️ Screen + Mic</button>
+        </div>
+
+        <!-- Video -->
+        <div class="relative bg-black rounded-xl overflow-hidden" style="aspect-ratio:16/9">
+          <video id="live-video" class="w-full h-full object-cover" playsinline muted></video>
+          <canvas id="snap-canvas" class="hidden"></canvas>
+
+          <!-- Start overlay -->
+          <div id="start-overlay" class="absolute inset-0 flex flex-col items-center justify-center text-white">
+            <p id="cam-error" class="text-red-400 text-sm mb-3 hidden"></p>
+            <button onclick="startCamera()"
+              class="px-6 py-3 bg-brand-600 text-white rounded-xl font-semibold text-lg hover:bg-brand-700 transition-colors">
+              ▶ Start Camera
+            </button>
+          </div>
+
+          <!-- REC badge -->
+          <div id="rec-badge" class="hidden absolute top-3 left-3 flex items-center gap-2 bg-black/60 text-white px-3 py-1.5 rounded-full text-sm">
+            <span class="w-2.5 h-2.5 rounded-full bg-red-500 rec-dot"></span>
+            REC <span id="rec-timer">00:00</span>
+          </div>
+
+          <!-- Upload indicator -->
+          <div id="upload-badge" class="hidden absolute bottom-3 right-3 bg-black/60 text-white px-3 py-1.5 rounded-full text-sm">
+            Uploading…
+          </div>
+        </div>
+
+        <!-- Controls -->
+        <div id="controls" class="hidden flex items-center gap-3 flex-wrap">
+          <button id="rec-start-btn" onclick="startRecording()"
+            class="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors">
+            <span class="w-3 h-3 rounded-full bg-white"></span> Start Recording
+          </button>
+          <button id="rec-stop-btn" onclick="stopRecording()" style="display:none"
+            class="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors">
+            <span class="w-3 h-3 bg-white"></span> Stop Recording
+          </button>
+          <button id="snap-btn" onclick="takeSnapshot()"
+            class="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors">
+            📸 Take Photo
+          </button>
+          <button onclick="stopCamera()"
+            class="inline-flex items-center gap-2 px-4 py-2 bg-white border border-red-200 text-red-600 rounded-lg font-medium hover:bg-red-50 transition-colors">
+            Stop Camera
+          </button>
+        </div>
+      </div>
+
+      <!-- Right panel -->
+      <div class="space-y-4">
+        <!-- Order info -->
+        <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+          <h3 class="font-semibold text-gray-800 mb-3">Order Details</h3>
+          <dl class="space-y-2 text-sm" id="order-details">
+            <dd class="text-gray-400">Loading…</dd>
+          </dl>
+          <div id="order-items-wrap" class="mt-3 pt-3 border-t border-gray-100 hidden">
+            <p class="text-xs text-gray-500 font-medium uppercase tracking-wide mb-1">Items</p>
+            <p class="text-sm text-gray-700" id="order-items"></p>
+          </div>
+        </div>
+
+        <!-- Media gallery -->
+        <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-semibold text-gray-800">Captured Media</h3>
+            <span id="media-count" class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">0</span>
+          </div>
+          <ul id="media-list" class="space-y-2">
+            <li id="no-media" class="text-sm text-gray-400">No media yet. Record a video or take a photo.</li>
+          </ul>
+        </div>
+
+        <!-- Tips -->
+        <div class="bg-blue-50 border border-blue-100 rounded-xl p-4">
+          <p class="text-xs font-semibold text-blue-700 mb-2">Recording Tips</p>
+          <ul class="text-xs text-blue-600 space-y-1 list-disc list-inside">
+            <li>Show the product, packaging, and any seals</li>
+            <li>Clearly display the order number / label</li>
+            <li>Capture all items in the order</li>
+            <li>Good lighting improves quality</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading / error states -->
+  <div id="loading" class="flex items-center justify-center min-h-64 text-gray-400">Loading order…</div>
+  <div id="not-found" class="hidden flex items-center justify-center min-h-64 flex-col gap-4">
+    <p class="text-gray-500">Order not found.</p>
+    <a href="orders.html" class="px-4 py-2 bg-brand-600 text-white rounded-lg font-medium hover:bg-brand-700">← Back to Orders</a>
+  </div>
+
+  <script>
+    const orderId = new URLSearchParams(location.search).get('id');
+    let order     = null;
+    let mediaList = [];
+    let stream    = null;
+    let recorder  = null;
+    let chunks    = [];
+    let timerInt  = null;
+    let timerSec  = 0;
+    let currentMode = 'camera';
+
+    // ── Load order ────────────────────────────────────────────────────────────
+    if (!orderId) {
+      showNotFound();
+    } else {
+      fetch(`/api/orders/${orderId}`)
+        .then(r => r.json())
+        .then(data => {
+          if (!data.order) { showNotFound(); return; }
+          order     = data.order;
+          mediaList = order.media || [];
+          renderOrderInfo();
+          renderMedia();
+          document.getElementById('loading').style.display = 'none';
+          document.getElementById('main').style.display    = '';
+          setMode('camera');
+          if (mediaList.length) updateSendBtn();
+        })
+        .catch(showNotFound);
+    }
+
+    function showNotFound() {
+      document.getElementById('loading').style.display  = 'none';
+      document.getElementById('not-found').style.display = 'flex';
+    }
+
+    // ── Order info ────────────────────────────────────────────────────────────
+    function renderOrderInfo() {
+      document.getElementById('order-subtitle').textContent =
+        `Order ${order.orderNumber} — ${order.customerName || ''}`;
+
+      const fields = [
+        ['Order',    order.orderNumber],
+        ['Customer', order.customerName],
+        ['Email',    `<span class="text-brand-600">${order.customerEmail}</span>`],
+        order.customerPhone ? ['Phone', order.customerPhone] : null,
+        ['Total',    order.total],
+      ].filter(Boolean);
+
+      document.getElementById('order-details').innerHTML = fields.map(([k, v]) => `
+        <div class="flex justify-between gap-2">
+          <dt class="text-gray-500 shrink-0">${k}</dt>
+          <dd class="font-medium text-gray-900 text-right">${v || '—'}</dd>
+        </div>`).join('');
+
+      if (order.lineItems) {
+        document.getElementById('order-items').textContent = order.lineItems;
+        document.getElementById('order-items-wrap').classList.remove('hidden');
+      }
+    }
+
+    function updateSendBtn() {
+      const btn = document.getElementById('send-btn');
+      btn.style.display = mediaList.length ? '' : 'none';
+      btn.textContent   = `📧 Send Proof to ${order.customerEmail}`;
+    }
+
+    // ── Mode ──────────────────────────────────────────────────────────────────
+    function setMode(m) {
+      currentMode = m;
+      stopCamera();
+      ['camera','screen'].forEach(id => {
+        const active = id === m;
+        document.getElementById(`mode-${id}`).className =
+          `mode-btn px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${active ? 'bg-white shadow text-brand-700' : 'text-gray-500 hover:text-gray-700'}`;
+      });
+    }
+
+    // ── Camera ────────────────────────────────────────────────────────────────
+    async function startCamera() {
+      const errEl = document.getElementById('cam-error');
+      errEl.classList.add('hidden');
+      try {
+        if (currentMode === 'screen') {
+          stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+          try {
+            const mic = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mic.getAudioTracks().forEach(t => stream.addTrack(t));
+          } catch (_) {}
+        } else {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+            audio: true,
+          });
+        }
+        const vid = document.getElementById('live-video');
+        vid.srcObject = stream;
+        await vid.play();
+        document.getElementById('start-overlay').style.display = 'none';
+        document.getElementById('controls').classList.remove('hidden');
+      } catch (err) {
+        errEl.textContent = err.message || 'Camera access denied';
+        errEl.classList.remove('hidden');
+      }
+    }
+
+    function stopCamera() {
+      if (recorder && recorder.state !== 'inactive') recorder.stop();
+      stream?.getTracks().forEach(t => t.stop());
+      stream = null;
+      document.getElementById('live-video').srcObject = null;
+      document.getElementById('start-overlay').style.display = '';
+      document.getElementById('controls').classList.add('hidden');
+      document.getElementById('rec-badge').classList.add('hidden');
+      clearInterval(timerInt);
+      setRecordingUI(false);
+    }
+
+    // ── Recording ─────────────────────────────────────────────────────────────
+    function startRecording() {
+      if (!stream) return;
+      chunks = [];
+      const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+        ? 'video/webm;codecs=vp9' : 'video/webm';
+      recorder = new MediaRecorder(stream, { mimeType });
+      recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+      recorder.onstop = saveRecording;
+      recorder.start(1000);
+      setRecordingUI(true);
+      timerSec = 0;
+      document.getElementById('rec-timer').textContent = '00:00';
+      document.getElementById('rec-badge').classList.remove('hidden');
+      timerInt = setInterval(() => {
+        timerSec++;
+        const m = String(Math.floor(timerSec/60)).padStart(2,'0');
+        const s = String(timerSec%60).padStart(2,'0');
+        document.getElementById('rec-timer').textContent = `${m}:${s}`;
+      }, 1000);
+    }
+
+    function stopRecording() {
+      recorder?.stop();
+      clearInterval(timerInt);
+      document.getElementById('rec-badge').classList.add('hidden');
+      setRecordingUI(false);
+    }
+
+    function setRecordingUI(isRec) {
+      document.getElementById('rec-start-btn').style.display = isRec ? 'none' : '';
+      document.getElementById('rec-stop-btn').style.display  = isRec ? ''     : 'none';
+      document.getElementById('snap-btn').disabled           = isRec;
+    }
+
+    async function saveRecording() {
+      const blob = new Blob(chunks, { type: 'video/webm' });
+      await uploadMedia(blob, 'video/webm', 'video');
+    }
+
+    // ── Snapshot ──────────────────────────────────────────────────────────────
+    function takeSnapshot() {
+      const vid    = document.getElementById('live-video');
+      const canvas = document.getElementById('snap-canvas');
+      canvas.width  = vid.videoWidth;
+      canvas.height = vid.videoHeight;
+      canvas.getContext('2d').drawImage(vid, 0, 0);
+      canvas.toBlob(blob => uploadMedia(blob, 'image/jpeg', 'image'), 'image/jpeg', 0.92);
+    }
+
+    // ── Upload ────────────────────────────────────────────────────────────────
+    async function uploadMedia(blob, mimeType, kind) {
+      document.getElementById('upload-badge').classList.remove('hidden');
+      try {
+        const ext  = kind === 'video' ? 'webm' : 'jpg';
+        const form = new FormData();
+        form.append('file',    blob, `${kind}-${Date.now()}.${ext}`);
+        form.append('orderId', orderId);
+        form.append('kind',    kind);
+
+        const res  = await fetch('/api/upload', { method: 'POST', body: form });
+        const data = await res.json();
+        if (data.media) {
+          mediaList.push(data.media);
+          renderMedia();
+          updateSendBtn();
+        }
+      } finally {
+        document.getElementById('upload-badge').classList.add('hidden');
+      }
+    }
+
+    async function deleteMedia(mediaId) {
+      await fetch(`/api/upload/${mediaId}`, { method: 'DELETE' });
+      mediaList = mediaList.filter(m => m.id !== mediaId);
+      renderMedia();
+      updateSendBtn();
+    }
+
+    function renderMedia() {
+      const list = document.getElementById('media-list');
+      document.getElementById('media-count').textContent = mediaList.length;
+      document.getElementById('no-media').style.display  = mediaList.length ? 'none' : '';
+
+      const items = mediaList.map(m => {
+        const icon = m.kind === 'video' ? '🎬' : '📸';
+        return `
+          <li class="flex items-center gap-3 p-2 bg-gray-50 rounded-lg">
+            <div class="w-8 h-8 rounded bg-gray-200 flex items-center justify-center text-base flex-shrink-0">${icon}</div>
+            <div class="flex-1 min-w-0">
+              <p class="text-xs font-medium text-gray-700 truncate">${m.filename}</p>
+              <p class="text-xs text-gray-400">${m.kind} · ${m.sizeLabel}</p>
+            </div>
+            <div class="flex gap-1 flex-shrink-0">
+              <a href="${m.url}" target="_blank"
+                class="p-1 text-gray-400 hover:text-brand-600" title="Open">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+                </svg>
+              </a>
+              <button onclick="deleteMedia('${m.id}')"
+                class="p-1 text-gray-400 hover:text-red-500" title="Delete">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+              </button>
+            </div>
+          </li>`;
+      });
+      list.innerHTML = items.join('') + `<li id="no-media" style="${mediaList.length ? 'display:none' : ''}" class="text-sm text-gray-400">No media yet. Record a video or take a photo.</li>`;
+    }
+
+    // ── Send proof ────────────────────────────────────────────────────────────
+    async function sendProof() {
+      if (!confirm(`Send proof to ${order.customerEmail}?`)) return;
+      const btn = document.getElementById('send-btn');
+      btn.disabled = true; btn.textContent = 'Sending…';
+      try {
+        const res  = await fetch('/api/send-proof', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orderId }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert(`✓ Proof sent to ${order.customerEmail}!`);
+          location.href = 'orders.html';
+        } else {
+          alert(data.error || 'Send failed');
+          btn.disabled = false; btn.textContent = `📧 Send Proof to ${order.customerEmail}`;
+        }
+      } catch (e) {
+        alert('Network error');
+        btn.disabled = false; btn.textContent = `📧 Send Proof to ${order.customerEmail}`;
+      }
+    }
+  </script>
+</body>
+</html>

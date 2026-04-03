@@ -21,53 +21,61 @@ npm install
 
 # 2. Configure environment
 cp .env.example .env.local
-# Edit .env.local with your SMTP credentials (and optionally Shopify API token)
+# Edit .env.local with your SMTP credentials
 
 # 3. Run
-npm run dev
+npm start
 # → http://localhost:3000
 ```
 
-## Environment Variables
+Open `http://localhost:3000` — no build step required, just plain HTML pages served by Express.
+
+## Pages
+
+| File | URL | Purpose |
+|------|-----|---------|
+| `public/index.html`  | `/index.html`  | Dashboard with stats |
+| `public/orders.html` | `/orders.html` | Orders list + send proof |
+| `public/import.html` | `/import.html` | CSV upload or Shopify API sync |
+| `public/record.html` | `/record.html?id=<orderId>` | Recording studio |
+
+## Environment Variables (`.env.local`)
 
 | Variable | Description |
 |----------|-------------|
-| `SHOPIFY_STORE_URL` | `your-store.myshopify.com` |
-| `SHOPIFY_ACCESS_TOKEN` | Shopify Admin API access token |
-| `SMTP_HOST` | SMTP server hostname (e.g. `smtp.gmail.com`) |
-| `SMTP_PORT` | SMTP port (`587` for TLS, `465` for SSL) |
-| `SMTP_USER` | SMTP username / email address |
-| `SMTP_PASS` | SMTP password or app password |
+| `SMTP_HOST` | SMTP server (e.g. `smtp.gmail.com`) |
+| `SMTP_PORT` | `587` for TLS, `465` for SSL |
+| `SMTP_USER` | Your email address |
+| `SMTP_PASS` | App password |
 | `SMTP_FROM` | From address shown to customers |
-| `NEXT_PUBLIC_BASE_URL` | Public URL of your deployment |
+| `PORT` | Server port (default `3000`) |
+
+Shopify API credentials are entered directly in the Import page — no env variable needed.
 
 ## Workflow
 
 ```
-Import Orders (CSV or Shopify API)
+Import Orders (CSV upload or Shopify API)
        ↓
-Orders Dashboard (see all orders + status)
+Orders Dashboard  →  filter by status
        ↓
 Recording Studio (per order)
   ├── Start webcam / screen capture
-  ├── Record video → auto-saved
-  └── Take photos → auto-saved
+  ├── Record video  →  auto-saved to server
+  └── Take photos   →  auto-saved to server
        ↓
-Send Proof Email to customer
+Click "Send Proof"  →  email sent to customer
   └── Attaches all videos & photos
        ↓
 Order marked as "sent" ✓
 ```
 
-## Shopify CSV Format
-
-Export from **Shopify Admin → Orders → Export → All orders (CSV for Excel)**. The system auto-detects the standard Shopify column names (`Name`, `Email`, `Billing Name`, `Lineitem name`, etc.) and collapses multi-row line items into a single order record.
-
 ## Tech Stack
 
-- **Next.js 14** (App Router)
-- **Tailwind CSS**
-- **MediaRecorder API** (browser-native video/audio recording)
+- **HTML + Vanilla JS** (no framework, no build step)
+- **Tailwind CSS** (CDN)
+- **Express.js** (backend + static file server)
+- **MediaRecorder API** (browser-native video recording)
 - **Nodemailer** (SMTP email with attachments)
-- **PapaParse** (CSV parsing)
-- **File-based JSON store** (swap for Postgres/Supabase in production)
+- **PapaParse** (CDN, CSV parsing in-browser)
+- **File-based JSON store** (`.data/` folder)
