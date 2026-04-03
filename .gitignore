@@ -1,0 +1,22 @@
+# deps
+node_modules/
+
+# Next.js
+.next/
+out/
+
+# Local data store (videos, images, orders.json)
+.data/
+
+# env
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
