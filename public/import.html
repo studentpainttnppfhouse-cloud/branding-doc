@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DeliveryProof – Import Orders</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: { colors: { brand: { 50:'#f0f9ff',100:'#e0f2fe',500:'#0ea5e9',600:'#0284c7',700:'#0369a1' } } } }
+    }
+  </script>
+</head>
+<body class="bg-gray-50 text-gray-900 antialiased">
+
+  <!-- Nav -->
+  <nav class="bg-white border-b border-gray-200 px-6 py-3 flex items-center gap-6 sticky top-0 z-50 shadow-sm">
+    <a href="index.html" class="flex items-center gap-2 font-bold text-brand-700 text-lg">
+      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M15 10l4.553-2.069A1 1 0 0121 8.867V17a1 1 0 01-1.447.894L15 15M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/>
+      </svg>
+      DeliveryProof
+    </a>
+    <a href="index.html"  class="text-sm text-gray-500 hover:text-brand-600">Dashboard</a>
+    <a href="orders.html" class="text-sm text-gray-500 hover:text-brand-600">Orders</a>
+    <a href="import.html" class="text-sm font-medium text-brand-600">Import</a>
+  </nav>
+
+  <div class="max-w-3xl mx-auto px-6 py-10">
+    <h1 class="text-2xl font-bold text-gray-900 mb-1">Import Orders</h1>
+    <p class="text-gray-500 mb-8">Pull orders from Shopify to begin recording delivery proofs</p>
+
+    <!-- Tabs -->
+    <div class="flex gap-1 p-1 bg-gray-100 rounded-lg w-fit mb-8">
+      <button onclick="switchTab('csv')"     id="tab-csv"     class="tab-btn px-5 py-2 rounded-md text-sm font-medium transition-colors">📄 CSV Upload</button>
+      <button onclick="switchTab('shopify')" id="tab-shopify" class="tab-btn px-5 py-2 rounded-md text-sm font-medium transition-colors">🛍️ Shopify API</button>
+    </div>
+
+    <!-- Result banner -->
+    <div id="result" class="hidden mb-6 p-4 rounded-lg flex items-center justify-between text-sm font-medium"></div>
+
+    <!-- CSV Tab -->
+    <div id="panel-csv">
+      <!-- Drop zone -->
+      <div id="dropzone"
+        class="border-2 border-dashed border-gray-300 rounded-xl p-12 text-center cursor-pointer hover:border-brand-400 hover:bg-gray-50 transition-colors mb-6"
+        onclick="document.getElementById('file-input').click()"
+        ondragover="event.preventDefault(); this.classList.add('border-brand-500','bg-brand-50')"
+        ondragleave="this.classList.remove('border-brand-500','bg-brand-50')"
+        ondrop="onDrop(event)">
+        <svg class="w-12 h-12 mx-auto text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+            d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+        </svg>
+        <p class="text-gray-600 font-medium">Drop your Shopify orders CSV here</p>
+        <p class="text-sm text-gray-400 mt-1">or click to browse</p>
+        <input id="file-input" type="file" accept=".csv" class="hidden" onchange="handleFile(this.files[0])" />
+      </div>
+
+      <!-- CSV hint -->
+      <div class="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-6">
+        <p class="text-sm font-medium text-blue-700 mb-2">Expected CSV columns</p>
+        <div class="flex flex-wrap gap-2">
+          <span class="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-mono">Name</span>
+          <span class="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-mono">Email</span>
+          <span class="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-mono">Billing Name</span>
+          <span class="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-mono">Financial Status</span>
+          <span class="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-mono">Fulfillment Status</span>
+          <span class="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-mono">Total</span>
+          <span class="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-mono">Lineitem name</span>
+          <span class="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-mono">Phone</span>
+        </div>
+        <p class="text-xs text-blue-500 mt-2">Shopify Admin → Orders → Export CSV (default format)</p>
+      </div>
+
+      <!-- Preview -->
+      <div id="preview-box" class="hidden bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div class="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+          <span class="font-medium text-gray-800" id="preview-count"></span>
+          <button onclick="clearPreview()" class="text-sm text-gray-400 hover:text-gray-600">Clear</button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase">Order</th>
+                <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase">Customer</th>
+                <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase">Email</th>
+                <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase">Total</th>
+                <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase">Status</th>
+              </tr>
+            </thead>
+            <tbody id="preview-tbody" class="divide-y divide-gray-100"></tbody>
+          </table>
+        </div>
+        <div class="px-5 py-4 bg-gray-50 border-t border-gray-100">
+          <button id="import-btn" onclick="submitCSV()"
+            class="inline-flex items-center gap-2 px-4 py-2 bg-brand-600 text-white rounded-lg font-medium hover:bg-brand-700 transition-colors disabled:opacity-50">
+            Import Orders
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Shopify API Tab -->
+    <div id="panel-shopify" class="hidden bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-5">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Store URL</label>
+        <input id="store-url" type="text" placeholder="your-store.myshopify.com"
+          class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"/>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Admin API Access Token</label>
+        <input id="access-token" type="password" placeholder="shpat_xxxxxxxxxxxxxxxx"
+          class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"/>
+        <p class="text-xs text-gray-400 mt-1">Shopify Admin → Apps → Develop apps → API credentials</p>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Fulfillment Status</label>
+        <select id="fulfill-status"
+          class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <option value="unfulfilled">Unfulfilled (awaiting dispatch)</option>
+          <option value="partial">Partially fulfilled</option>
+          <option value="any">All orders</option>
+        </select>
+      </div>
+      <button id="sync-btn" onclick="syncShopify()"
+        class="inline-flex items-center gap-2 px-4 py-2 bg-brand-600 text-white rounded-lg font-medium hover:bg-brand-700 transition-colors disabled:opacity-50">
+        🔄 Sync Orders from Shopify
+      </button>
+    </div>
+  </div>
+
+  <script>
+    let parsedRows = [];
+
+    // ── Tabs ──────────────────────────────────────────────────────────────────
+    function switchTab(t) {
+      document.getElementById('panel-csv').classList.toggle('hidden', t !== 'csv');
+      document.getElementById('panel-shopify').classList.toggle('hidden', t !== 'shopify');
+      document.getElementById('tab-csv').className     = `tab-btn px-5 py-2 rounded-md text-sm font-medium transition-colors ${t==='csv'     ? 'bg-white shadow text-brand-700' : 'text-gray-500 hover:text-gray-700'}`;
+      document.getElementById('tab-shopify').className = `tab-btn px-5 py-2 rounded-md text-sm font-medium transition-colors ${t==='shopify' ? 'bg-white shadow text-brand-700' : 'text-gray-500 hover:text-gray-700'}`;
+    }
+    switchTab('csv');
+
+    // ── CSV ───────────────────────────────────────────────────────────────────
+    function onDrop(e) {
+      e.preventDefault();
+      document.getElementById('dropzone').classList.remove('border-brand-500','bg-brand-50');
+      handleFile(e.dataTransfer.files[0]);
+    }
+
+    function handleFile(file) {
+      if (!file) return;
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete({ data }) {
+          parsedRows = data;
+          showPreview(data);
+        }
+      });
+    }
+
+    function showPreview(rows) {
+      document.getElementById('preview-count').textContent = `${rows.length} orders detected`;
+      document.getElementById('import-btn').textContent    = `Import ${rows.length} Orders`;
+      document.getElementById('preview-tbody').innerHTML   = rows.slice(0, 10).map((r, i) => `
+        <tr>
+          <td class="px-4 py-2 font-mono text-xs">${r['Name']||r['order_number']||`#${i+1}`}</td>
+          <td class="px-4 py-2">${r['Billing Name']||r['Customer Name']||'—'}</td>
+          <td class="px-4 py-2 text-gray-500">${r['Email']||'—'}</td>
+          <td class="px-4 py-2">${r['Total']||'—'}</td>
+          <td class="px-4 py-2">${r['Financial Status']||'—'}</td>
+        </tr>`).join('') + (rows.length > 10 ? `<tr><td colspan="5" class="px-4 py-2 text-xs text-gray-400">…and ${rows.length-10} more rows</td></tr>` : '');
+      document.getElementById('preview-box').classList.remove('hidden');
+    }
+
+    function clearPreview() {
+      parsedRows = [];
+      document.getElementById('preview-box').classList.add('hidden');
+      document.getElementById('file-input').value = '';
+    }
+
+    async function submitCSV() {
+      if (!parsedRows.length) return;
+      const btn = document.getElementById('import-btn');
+      btn.disabled = true; btn.textContent = 'Importing…';
+      try {
+        const res  = await fetch('/api/orders/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source: 'csv', rows: parsedRows }),
+        });
+        const data = await res.json();
+        showResult(data);
+        clearPreview();
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    // ── Shopify API ───────────────────────────────────────────────────────────
+    async function syncShopify() {
+      const storeUrl    = document.getElementById('store-url').value.trim();
+      const accessToken = document.getElementById('access-token').value.trim();
+      if (!storeUrl || !accessToken) { alert('Please fill in both fields'); return; }
+      const btn = document.getElementById('sync-btn');
+      btn.disabled = true; btn.textContent = 'Syncing…';
+      try {
+        const res  = await fetch('/api/orders/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source: 'shopify', storeUrl, accessToken }),
+        });
+        const data = await res.json();
+        showResult(data);
+      } finally {
+        btn.disabled = false; btn.textContent = '🔄 Sync Orders from Shopify';
+      }
+    }
+
+    // ── Result ────────────────────────────────────────────────────────────────
+    function showResult(data) {
+      const box = document.getElementById('result');
+      if (data.error) {
+        box.className = 'mb-6 p-4 rounded-lg flex items-center justify-between text-sm font-medium bg-red-50 text-red-700';
+        box.innerHTML = `<span>Error: ${data.error}</span><button onclick="this.parentElement.classList.add('hidden')" class="underline">Dismiss</button>`;
+      } else {
+        box.className = 'mb-6 p-4 rounded-lg flex items-center justify-between text-sm font-medium bg-green-50 text-green-700';
+        box.innerHTML = `<span>✓ Imported ${data.imported} orders (${data.total} total in file)</span>
+          <div class="flex gap-3">
+            <button onclick="this.closest('#result').classList.add('hidden')" class="underline">Dismiss</button>
+            <a href="orders.html" class="underline">View Orders →</a>
+          </div>`;
+      }
+      box.classList.remove('hidden');
+    }
+  </script>
+</body>
+</html>
